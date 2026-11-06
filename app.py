@@ -1,18 +1,29 @@
 import streamlit as st
-import pandas as pd
 from datetime import date
-from sqlalchemy import text
+from supabase import create_client, Client
 
 st.set_page_config(page_title="Tracker 2000kcal", layout="centered")
+
+# Validação explícita para garantir que os Secrets corretos foram carregados
+if "SUPABASE_URL" not in st.secrets or "SUPABASE_KEY" not in st.secrets:
+    st.error("Configure SUPABASE_URL e SUPABASE_KEY nos Secrets do Streamlit.")
+    st.stop()
+
+url: str = st.secrets["SUPABASE_URL"]
+key: str = st.secrets["SUPABASE_KEY"]
+
+if url.startswith("postgresql"):
+    st.error("A variável SUPABASE_URL ainda está com a string 'postgresql://'. Troque pela URL 'https://...' da aba API do Supabase.")
+    st.stop()
+
+# Inicializa o cliente via HTTPS (API REST)
+supabase: Client = create_client(url, key)
 
 TARGET_KCAL = 2000.0
 TARGET_PROT = 170.0
 hoje = str(date.today())
 
 st.title("Controle Nutricional")
-
-# Conexão relacional usando a URL do Supabase salva nos secrets
-conn = st.connection("sql", url=st.secrets["SUPABASE_URL"])
 
 # Formulário de inserção
 with st.form("form_registro_principal", clear_on_submit=True):
@@ -25,24 +36,28 @@ with st.form("form_registro_principal", clear_on_submit=True):
     
     submitted = st.form_submit_button("Registrar")
     if submitted and alimento:
-        with conn.session as s:
-            s.execute(
-                text("INSERT INTO registros (data, alimento, calorias, proteinas) VALUES (:d, :a, :c, :p)"),
-                {"d": hoje, "a": alimento, "c": calorias, "p": proteinas}
-            )
-            s.commit()
+        supabase.table("registros").insert({
+            "data": hoje,
+            "alimento": alimento,
+            "calorias": float(calorias),
+            "proteinas": float(proteinas)
+        }).execute()
         st.success(f"{alimento} registrado com sucesso!")
         st.rerun()
 
-# Leitura dos registros da data atual (ttl=0 garante leitura sem cache local)
-df_hoje = conn.query(
-    "SELECT id, alimento, calorias, proteinas FROM registros WHERE data = :d ORDER BY id DESC",
-    params={"d": hoje},
-    ttl=0
+# Busca os dados do dia via HTTPS
+response = (
+    supabase.table("registros")
+    .select("id, alimento, calorias, proteinas")
+    .eq("data", hoje)
+    .order("id", desc=True)
+    .execute()
 )
 
-tot_kcal = float(df_hoje["calorias"].sum()) if not df_hoje.empty else 0.0
-tot_prot = float(df_hoje["proteinas"].sum()) if not df_hoje.empty else 0.0
+registros = response.data or []
+
+tot_kcal = sum(float(r["calorias"]) for r in registros)
+tot_prot = sum(float(r["proteinas"]) for r in registros)
 
 # Painel de métricas
 st.subheader(f"Resumo de Hoje ({hoje})")
@@ -53,10 +68,10 @@ col_b.metric("Proteínas Restantes", f"{max(0.0, TARGET_PROT - tot_prot):.1f} g"
 st.progress(min(1.0, tot_kcal / TARGET_KCAL), text=f"Calorias: {tot_kcal:.0f} / {TARGET_KCAL:.0f} kcal")
 st.progress(min(1.0, tot_prot / TARGET_PROT), text=f"Proteína: {tot_prot:.1f} / {TARGET_PROT:.1f} g")
 
-# Listagem dos itens
+# Listagem de itens
 st.subheader("Itens Registrados")
-if not df_hoje.empty:
-    for _, row in df_hoje.iterrows():
-        st.write(f"• **{row['alimento']}**: {row['calorias']:.0f} kcal | {row['proteinas']:.1f}g prot")
+if registros:
+    for r in registros:
+        st.write(f"• **{r['alimento']}**: {r['calorias']:.0f} kcal | {r['proteinas']:.1f}g prot")
 else:
     st.caption("Nenhum registro para hoje.")
