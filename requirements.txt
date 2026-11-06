@@ -1,7 +1,2 @@
 streamlit
-st-gsheets-connection
-pandas
-streamlit
-psycopg2-binary
-sqlalchemy
-psycopg[binary]
+supabase
