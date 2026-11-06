@@ -12,7 +12,7 @@ hoje = str(date.today())
 st.title("Controle Nutricional")
 
 # Conexão relacional usando a URL do Supabase salva nos secrets
-conn = st.connection("sql", url=st.secrets["database"]["url"])
+conn = st.connection("sql", url=st.secrets["SUPABASE_URL"])
 
 # Formulário de inserção
 with st.form("form_registro_principal", clear_on_submit=True):
