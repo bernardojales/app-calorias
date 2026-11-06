@@ -84,7 +84,7 @@ st.title("Controle Nutricional")
 hoje = str(date.today())
 
 # Formulário de inserção rápida
-with st.form("form_registro", clear_on_submit=True):
+with st.form("form_registro2", clear_on_submit=True):
     alimento = st.text_input("Alimento/Refeição")
     col1, col2 = st.columns(2)
     with col1:
